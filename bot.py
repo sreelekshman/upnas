@@ -97,24 +97,21 @@ async def handle_video(update, context):
             return CHOOSING
 
         elif update.message.document:
+            document = update.message.document
+            file_id = document.file_id
             try:
-                document = update.message.document
-                file_id = document.file_id
-                try:
-                    file_path = await context.bot.get_file(file_id, read_timeout=None)
-                except Exception as e:
-                    await update.message.reply_text(f"Error: {e}")
-                    return
+                file_path = await context.bot.get_file(file_id, read_timeout=None)
+            except Exception as e:
+                await update.message.reply_text(f"Error: {e}")
+                return
 
-                # Store the file_path and video in context.user_data
-                context.user_data['file_path'] = file_path
-                context.user_data['video'] = document
-                keyboard = [[InlineKeyboardButton('Movie', callback_data='movie'), InlineKeyboardButton('TV Series', callback_data='tv_series')]]
-                reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-                await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
-                return CHOOSING
-            except telegram.error.TimedOut as e:
-                await update.message.reply_text(e)
+            # Store the file_path and video in context.user_data
+            context.user_data['file_path'] = file_path
+            context.user_data['video'] = document
+            keyboard = [[InlineKeyboardButton('Movie', callback_data='movie'), InlineKeyboardButton('TV Series', callback_data='tv_series')]]
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+            await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
+            return CHOOSING
         else:
             await update.message.reply_text('Please forward a video file.')
     else:
