@@ -8,6 +8,8 @@ import telegram
 import os
 import shutil
 import re
+import requests
+import json
 
 from telegram import ForceReply, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
@@ -138,15 +140,64 @@ async def handle_button_click(update, context):
         folder_name = movie_folder_name(file_name)
         os.mkdir(f'/media/Movies/{folder_name}')
         dest = shutil.copyfile(f'/our_root{location}', f'/media/Movies/{folder_name}/{file_name}')
+        await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
     elif choice == 'tv_series':
         await query.answer(text='TV Series selected')
         await query.edit_message_text(text=f"TV Series selected.")
-        dest = shutil.copyfile(f'/our_root{location}', f'/media/TV Shows/{file_name}')
+        keyboard = [[InlineKeyboardButton('One Piece', callback_data='onepiece'), InlineKeyboardButton('Other', callback_data='other')]]
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+        await query.edit_message_text('Select the Series:', reply_markup=reply_markup)
+        #dest = shutil.copyfile(f'/our_root{location}', f'/media/TV Shows/{file_name}')
+    elif choice == 'onepiece':
+        await query.answer(text='One Piece selected')
+        await query.edit_message_text(text=f"One Piece selected.")
+
+        #OnePiece Anime Season and Episode Metadata
+        def get_season(ep_no):
+            if 1<=ep_no<=61:
+                season = 1
+            elif 62<=ep_no<=77:
+                season = 2
+            elif 78<=ep_no<=91:
+                season = 3
+            elif 92<=ep_no<=130:
+                season = 4
+            elif 131<=ep_no<=143:
+                season = 5
+            elif 144<=ep_no<=195:
+                season = 6
+            elif 196<=ep_no<=228:
+                season = 7
+            elif 229<=ep_no<=263:
+                season = 8
+            elif 264<=ep_no<=336:
+                season = 9
+            elif 337<=ep_no<=381:
+                season = 10
+            return season
+        
+        ep_no = int(file_name[12:15])
+        season = get_season(ep_no)
+        print(season)
+        url = f"https://api.themoviedb.org/3/tv/37854?api_key=API_KEY&append_to_response=season/{season}"
+        response = requests.get(url).json()
+        target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
+        image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
+        ep_name = target[0]['name']
+        await query.edit_message_text(text = f"{ep_name}")
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{file_name[:-4]}")
+        destination = f'/media/TV Shows/One Piece/Season {season}'
+        if not os.path.isdir(destination):
+            os.makedirs(destination)
+        dest = shutil.copyfile(f'/our_root{location}', f'{destination}/{ep_no} {ep_name}{file_name[-4:]}')
+        await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
+        
+
+
+        
     else:
         await query.answer(text='Invalid choice!')
         return
-
-    await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
 
     return CHOSEN
 
@@ -165,7 +216,7 @@ conv_handler = ConversationHandler(
 
 def movie_folder_name(filename):
   # Regex pattern to match year in various formats (brackets or not)
-  year_pattern = r"\(?(\d{4})\)?"
+  year_pattern = r"\[?\(?(\d{4})\]?\)?"
 
   # Split the filename based on year pattern
   parts = re.split(year_pattern, filename, maxsplit=1)
