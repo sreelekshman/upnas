@@ -81,7 +81,7 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(update.message.text)
 
 async def handle_video(update, context):
-    if (update.effective_user.id == 933423738):
+    if (update.effective_user.id == 933423738 or update.effective_user.id == 648869439):
         if update.message.video:
             video = update.message.video
             file_id = video.file_id
