@@ -149,29 +149,28 @@ async def handle_button_click(update, context):
         await query.answer(text='One Piece selected')
         await query.edit_message_text(text=f"One Piece selected.")
 
-        #OnePiece Anime Season and Episode Metadata
-        def get_season(ep_no):
-            if 1<=ep_no<=61:
-                season = 1
-            elif 62<=ep_no<=77:
-                season = 2
-            elif 78<=ep_no<=91:
-                season = 3
-            elif 92<=ep_no<=130:
-                season = 4
-            elif 131<=ep_no<=143:
-                season = 5
-            elif 144<=ep_no<=195:
-                season = 6
-            elif 196<=ep_no<=228:
-                season = 7
-            elif 229<=ep_no<=263:
-                season = 8
-            elif 264<=ep_no<=336:
-                season = 9
-            elif 337<=ep_no<=381:
-                season = 10
-            return season
+        def get_season(episode_number):
+            # Step 1: Fetch series details
+            series_url = "https://api.themoviedb.org/3/tv/37854?api_key=6API_KEY"
+            series_response = requests.get(series_url)
+            series_data = series_response.json()
+            
+            # Step 2: Iterate through the seasons
+            for season in series_data['seasons']:
+                season_number = season['season_number']
+                
+                # Step 3: Fetch season details
+                season_url = f"https://api.themoviedb.org/3/tv/37854/season/{season_number}?api_key=API_KEY"
+                season_response = requests.get(season_url)
+                season_data = season_response.json()
+                
+                # Step 4: Iterate through the episodes
+                for episode in season_data['episodes']:
+                    if episode['episode_number'] == episode_number:
+                        # Step 5: Return the season number
+                        return season_number
+            
+            return None  # If not found
         
         ep_no = int(file_name[12:15])
         season = get_season(ep_no)
@@ -186,7 +185,7 @@ async def handle_button_click(update, context):
         destination = f'/media/TV Shows/One Piece/Season {season}'
         if not os.path.isdir(destination):
             os.makedirs(destination)
-        dest = shutil.copyfile(f'/our_root{location}', f'{destination}/{ep_no} {ep_name}{file_name[-4:]}')
+        dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
         await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
         
 
