@@ -24,6 +24,9 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+tmdb_key = os.getenv("TMDb_KEY")
+bot_key = os.getenv("BOT_KEY")
+
 CHOOSING, CHOSEN = range(2)
 
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -151,7 +154,7 @@ async def handle_button_click(update, context):
 
         def get_season(episode_number):
             # Step 1: Fetch series details
-            series_url = "https://api.themoviedb.org/3/tv/37854?api_key=6API_KEY"
+            series_url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}"
             series_response = requests.get(series_url)
             series_data = series_response.json()
             
@@ -160,7 +163,7 @@ async def handle_button_click(update, context):
                 season_number = season['season_number']
                 
                 # Step 3: Fetch season details
-                season_url = f"https://api.themoviedb.org/3/tv/37854/season/{season_number}?api_key=API_KEY"
+                season_url = f"https://api.themoviedb.org/3/tv/37854/season/{season_number}?api_key={tmdb_key}"
                 season_response = requests.get(season_url)
                 season_data = season_response.json()
                 
@@ -175,21 +178,18 @@ async def handle_button_click(update, context):
         ep_no = int(file_name[12:15])
         season = get_season(ep_no)
         print(season)
-        url = f"https://api.themoviedb.org/3/tv/37854?api_key=API_KEY&append_to_response=season/{season}"
+        url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}&append_to_response=season/{season}"
         response = requests.get(url).json()
         target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
         image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
         ep_name = target[0]['name']
         await query.edit_message_text(text = f"{ep_name}")
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{file_name[:-4]}")
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{ep_name}")
         destination = f'/media/TV Shows/One Piece/Season {season}'
         if not os.path.isdir(destination):
             os.makedirs(destination)
         dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
         await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
-        
-
-
         
     else:
         await query.answer(text='Invalid choice!')
@@ -238,7 +238,7 @@ def movie_folder_name(filename):
 def main() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token("YOUR TOKEN").base_url("http://localhost:8081/bot").base_file_url("http://localhost:8081/file/bot").local_mode(local_mode=True).build()
+    application = Application.builder().token(bot_key).base_url("http://192.168.1.8:9099/bot").base_file_url("http://192.168.1.8:9099/file/bot").local_mode(local_mode=True).build()
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))
@@ -253,7 +253,6 @@ def main() -> None:
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 
 if __name__ == "__main__":
