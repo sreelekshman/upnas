@@ -79,9 +79,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=ForceReply(selective=True),
     )
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Echo the user message."""
-    await update.message.reply_text(update.message.text)
+async def ping(update, context):
+    await update.message.reply_text("Pong!")
 
 async def handle_video(update, context):
     if (update.effective_user.id == 933423738 or update.effective_user.id == 648869439):
@@ -244,9 +243,9 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("fpurge", fpurge))
+    application.add_handler(CommandHandler("ping", ping))
 
     # on non command i.e message - echo the message on Telegram
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
     application.add_handler(MessageHandler(filters.FORWARDED, handle_video))
     application.add_handler(CallbackQueryHandler(handle_button_click))
     application.add_handler(conv_handler)
