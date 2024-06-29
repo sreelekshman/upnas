@@ -139,7 +139,17 @@ async def handle_button_click(update, context):
         folder_name = movie_folder_name(file_name)
         os.mkdir(f'/media/Movies/{folder_name}')
         dest = shutil.copyfile(f'/our_root{location}', f'/media/Movies/{folder_name}/{file_name}')
-        await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
+        try:
+            query = folder_name[:-7]
+            query = query.replace(" ", "+")
+            year = folder_name[-5:-1]
+            url = requests.get(f"https://api.themoviedb.org/3/search/movie?query={query}&api_key={tmdb_key}").json()
+            if url["results"][0]['release_date'].startswith(f'{year}'):
+                poster =f'https://image.tmdb.org/t/p/original{url["results"][0]["poster_path"]}'
+                await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=folder_name)
+        except Exception as e:
+            print("Poster not found.")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f'{file_name} has been pushed to {dest}')
     elif choice == 'tv_series':
         await query.answer(text='TV Series selected')
         await query.edit_message_text(text=f"TV Series selected.")
