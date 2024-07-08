@@ -4,6 +4,7 @@
 
 
 import logging
+import httpx
 import telegram
 import os
 import shutil
@@ -88,32 +89,18 @@ async def ping(update, context):
 
 async def handle_video(update, context):
     if (update.effective_user.id == 933423738 or update.effective_user.id == 648869439):
-        if update.message.video:
-            video = update.message.video
-            file_id = video.file_id
-            file_path = (await context.bot.get_file(file_id, read_timeout=None))
-
-            # Store the file_path and video in context.user_data
+        media = update.message.video if update.message.video else update.message.document
+        if media:
+            file_id = media.file_id
+            while True:
+                try:
+                    file_path = await context.bot.get_file(file_id, read_timeout=None)
+                    break
+                except httpx.RemoteProtocolError as e:
+                    print(e)
             context.user_data['file_path'] = file_path
-            context.user_data['video'] = video
+            context.user_data['video'] = media
 
-            keyboard = [[InlineKeyboardButton('Movie', callback_data='movie'), InlineKeyboardButton('TV Series', callback_data='tv_series')]]
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-            await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
-            return CHOOSING
-
-        elif update.message.document:
-            document = update.message.document
-            file_id = document.file_id
-            try:
-                file_path = await context.bot.get_file(file_id, read_timeout=None)
-            except Exception as e:
-                await update.message.reply_text(f"Error: {e}")
-                return
-
-            # Store the file_path and video in context.user_data
-            context.user_data['file_path'] = file_path
-            context.user_data['video'] = document
             keyboard = [[InlineKeyboardButton('Movie', callback_data='movie'), InlineKeyboardButton('TV Series', callback_data='tv_series')]]
             reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
             await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
