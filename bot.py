@@ -7,9 +7,14 @@ import logging
 import telegram
 import os
 import shutil
-import re
 import requests
 import json
+import sys
+sys.path.append('/app/functions/series.py')
+
+from functions.series import fetch_series_names
+from functions.series import get_season
+from functions.series import movie_folder_name
 
 from telegram import ForceReply, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
@@ -118,6 +123,31 @@ async def handle_video(update, context):
     else:
         await update.message.reply_text('Sorry, You are not allowed to use this bot.')
 
+async def handle_tv_series(update, context):
+    query = update.callback_query
+    choice = str(query.data)  # Access the callback data from the button
+    video = context.user_data.get('video')
+    file_name = video.file_name
+    location = context.user_data.get('location')
+
+    await query.edit_message_text(text=f"{choice}")
+    ep_no = int(file_name[12:15])
+    season = get_season(ep_no)
+    print(season)
+    url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}&append_to_response=season/{season}"
+    response = requests.get(url).json()
+    target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
+    image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
+    ep_name = target[0]['name']
+    await query.edit_message_text(text = f"{ep_name}")
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{ep_name}")
+    destination = f'/media/TV Shows/{choice}/Season {season}'
+    if not os.path.isdir(destination):
+        os.makedirs(destination)
+    dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
+    await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
+    return CHOSEN
+
 async def handle_button_click(update, context):
     file_path = context.user_data.get('file_path')
     video = context.user_data.get('video')
@@ -129,6 +159,7 @@ async def handle_button_click(update, context):
     parsed_url = urlparse(file_path.file_path)
     path_components = parsed_url.path.split("/")
     location = "/"+"/".join(path_components[-2:])
+    context.user_data['location'] = location
     file_name = video.file_name
 
     # Handle the user's choice based on the callback data
@@ -152,53 +183,13 @@ async def handle_button_click(update, context):
     elif choice == 'tv_series':
         await query.answer(text='TV Series selected')
         await query.edit_message_text(text=f"TV Series selected.")
-        keyboard = [[InlineKeyboardButton('One Piece', callback_data='onepiece'), InlineKeyboardButton('Other', callback_data='other')]]
+        keyboard = []
+        series = fetch_series_names('/media/TV Shows')
+        for serie in series:
+            keyboard.append([InlineKeyboardButton(serie, callback_data=serie)])
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await query.edit_message_text('Select the Series:', reply_markup=reply_markup)
         #dest = shutil.copyfile(f'/our_root{location}', f'/media/TV Shows/{file_name}')
-    elif choice == 'onepiece':
-        await query.answer(text='One Piece selected')
-        await query.edit_message_text(text=f"One Piece selected.")
-
-        def get_season(episode_number):
-            # Step 1: Fetch series details
-            series_url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}"
-            series_response = requests.get(series_url)
-            series_data = series_response.json()
-            
-            # Step 2: Iterate through the seasons
-            for season in series_data['seasons']:
-                season_number = season['season_number']
-                
-                # Step 3: Fetch season details
-                season_url = f"https://api.themoviedb.org/3/tv/37854/season/{season_number}?api_key={tmdb_key}"
-                season_response = requests.get(season_url)
-                season_data = season_response.json()
-                
-                # Step 4: Iterate through the episodes
-                for episode in season_data['episodes']:
-                    if episode['episode_number'] == episode_number:
-                        # Step 5: Return the season number
-                        return season_number
-            
-            return None  # If not found
-        
-        ep_no = int(file_name[12:15])
-        season = get_season(ep_no)
-        print(season)
-        url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}&append_to_response=season/{season}"
-        response = requests.get(url).json()
-        target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
-        image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
-        ep_name = target[0]['name']
-        await query.edit_message_text(text = f"{ep_name}")
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{ep_name}")
-        destination = f'/media/TV Shows/One Piece/Season {season}'
-        if not os.path.isdir(destination):
-            os.makedirs(destination)
-        dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
-        await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
-        
     else:
         await query.answer(text='Invalid choice!')
         return
@@ -218,30 +209,6 @@ conv_handler = ConversationHandler(
     fallbacks=[CommandHandler('cancel', cancel)],
 )
 
-def movie_folder_name(filename):
-  # Regex pattern to match year in various formats (brackets or not)
-  year_pattern = r"\[?\(?(\d{4})\]?\)?"
-
-  # Split the filename based on year pattern
-  parts = re.split(year_pattern, filename, maxsplit=1)
-
-  if len(parts) < 2:
-    # Year not found
-    return None
-
-  # Remove dots (".") that might be used instead of spaces
-  movie_name = parts[0].replace(".", " ")
-
-  # Extract year from the second part
-  year_match = re.search(year_pattern, parts[1])
-  if year_match:
-    year = year_match.group(1)
-  else:
-    # Year not found in second part, might be incomplete filename
-    return None
-
-  # Combine movie name and year in desired format
-  return f"{movie_name}({year})"
         
 def main() -> None:
     """Start the bot."""
@@ -256,7 +223,8 @@ def main() -> None:
 
     # on non command i.e message - echo the message on Telegram
     application.add_handler(MessageHandler(filters.FORWARDED, handle_video))
-    application.add_handler(CallbackQueryHandler(handle_button_click))
+    application.add_handler(CallbackQueryHandler(handle_button_click, pattern='^(movie|tv_series)$'))
+    application.add_handler(CallbackQueryHandler(handle_tv_series))
     application.add_handler(conv_handler)
 
     # Run the bot until the user presses Ctrl-C
