@@ -17,6 +17,7 @@ from functions.series import fetch_series_names
 from functions.series import get_season
 from functions.series import movie_folder_name
 from functions.series import series_id
+from functions.series import extract_season_episode
 
 from telegram import ForceReply, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
@@ -120,9 +121,9 @@ async def handle_tv_series(update, context):
     series_id = series_id(choice)
 
     await query.edit_message_text(text=f"{choice}")
-    ep_no = int(file_name[12:15])
-    season = get_season(ep_no, series_id)
-    print(season)
+    season, ep_no = extract_season_episode(file_name)
+    if season == None:
+        season = get_season(ep_no, series_id)
     url = f"https://api.themoviedb.org/3/tv/{series_id}?api_key={tmdb_key}&append_to_response=season/{season}"
     response = requests.get(url).json()
     target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]

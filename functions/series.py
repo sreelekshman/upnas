@@ -70,3 +70,21 @@ def series_id(name):
         for i in range(len(response['results'])):
             series_id = response['results'][i]['id']
             return series_id
+        
+def extract_season_episode(filename):
+    # Check for season and episode number in the filename
+    match = re.search(r's(\d+)e(\d+)', filename, re.IGNORECASE)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+
+    # Check for episode number at the beginning of the filename
+    match = re.search(r'(\d+)', filename)
+    if match:
+        return None, int(match.group(1))
+
+    # Check for episode number only, without season information
+    match = re.search(r'e(\d+)', filename, re.IGNORECASE)
+    if match:
+        return None, int(match.group(1))
+
+    return None, None
