@@ -9,9 +9,9 @@ def fetch_series_names(dir):
             if os.path.isdir(os.path.join(dir, name))]
     
 # For One Piece only as of now
-def get_season(episode_number):
+def get_season(episode_number, id):
     # Step 1: Fetch series details
-    series_url = f"https://api.themoviedb.org/3/tv/37854?api_key={tmdb_key}"
+    series_url = f"https://api.themoviedb.org/3/tv/{id}?api_key={tmdb_key}"
     series_response = requests.get(series_url)
     series_data = series_response.json()
     
@@ -20,7 +20,7 @@ def get_season(episode_number):
         season_number = season['season_number']
         
         # Step 3: Fetch season details
-        season_url = f"https://api.themoviedb.org/3/tv/37854/season/{season_number}?api_key={tmdb_key}"
+        season_url = f"https://api.themoviedb.org/3/tv/{id}/season/{season_number}?api_key={tmdb_key}"
         season_response = requests.get(season_url)
         season_data = season_response.json()
         
@@ -56,3 +56,17 @@ def movie_folder_name(filename):
 
   # Combine movie name and year in desired format
   return f"{movie_name}({year})"
+
+def series_id(name):
+    name = name.replace(' ', '+')
+    url = f'https://api.themoviedb.org/3/search/tv?api_key={tmdb_key}&query={name}'
+    response = requests.get(url).json()
+    series_id = None
+    for i in range((len(response['results'])/2)):
+        if response['results'][i]['original_language'] == 'ja':
+            series_id = response['results'][i]['id']
+            return series_id
+    if series_id == None:
+        for i in range(len(response['results'])):
+            series_id = response['results'][i]['id']
+            return series_id
