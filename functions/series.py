@@ -62,7 +62,7 @@ def series_id(name):
     url = f'https://api.themoviedb.org/3/search/tv?api_key={tmdb_key}&query={name}'
     response = requests.get(url).json()
     series_id = None
-    for i in range((len(response['results'])/2)):
+    for i in range(int((len(response['results']))/2)):
         if response['results'][i]['original_language'] == 'ja':
             series_id = response['results'][i]['id']
             return series_id

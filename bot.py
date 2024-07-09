@@ -118,13 +118,13 @@ async def handle_tv_series(update, context):
     video = context.user_data.get('video')
     file_name = video.file_name
     location = context.user_data.get('location')
-    series_id = series_id(choice)
+    series_ID = series_id(choice)
 
     await query.edit_message_text(text=f"{choice}")
     season, ep_no = extract_season_episode(file_name)
     if season == None:
-        season = get_season(ep_no, series_id)
-    url = f"https://api.themoviedb.org/3/tv/{series_id}?api_key={tmdb_key}&append_to_response=season/{season}"
+        season = get_season(ep_no, series_ID)
+    url = f"https://api.themoviedb.org/3/tv/{series_ID}?api_key={tmdb_key}&append_to_response=season/{season}"
     response = requests.get(url).json()
     target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
     image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
