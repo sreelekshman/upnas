@@ -98,8 +98,13 @@ async def handle_video(update, context):
                 try:
                     file_path = await context.bot.get_file(file_id, read_timeout=None)
                     break
-                except httpx.RemoteProtocolError as e:
-                    print(e)
+                except Exception as e:
+                    error_message = str(e)
+                    if "httpx.RemoteProtocolError: Server disconnected without sending a response" in error_message:
+                        await update.message.reply_text(f'Server disconnected. Retrying...')
+                    elif "Wrong file_id or the file is temporarily unavailable" in error_message:
+                        await update.message.reply_text(f'The file is temporarily unavailable. Try again later.')
+                        return False
             context.user_data['file_path'] = file_path
             context.user_data['video'] = media
 
