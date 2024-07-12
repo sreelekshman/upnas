@@ -4,22 +4,16 @@
 
 
 import logging
-import httpx
 import telegram
 import os
 import shutil
 import requests
-import json
 import sys
 sys.path.append('/app/functions/series.py')
 
-from functions.series import fetch_series_names
-from functions.series import get_season
-from functions.series import movie_folder_name
-from functions.series import series_id
-from functions.series import extract_season_episode
+from functions.series import *
 
-from telegram import ForceReply, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
 from urllib.parse import urlparse
 
@@ -34,8 +28,6 @@ logger = logging.getLogger(__name__)
 
 tmdb_key = os.getenv("TMDb_KEY")
 bot_key = os.getenv("BOT_KEY")
-
-CHOOSING, CHOSEN = range(2)
 
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -111,7 +103,6 @@ async def handle_video(update, context):
             keyboard = [[InlineKeyboardButton('Movie', callback_data='movie'), InlineKeyboardButton('TV Series', callback_data='tv_series')]]
             reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
             await update.message.reply_text('Choose an option:', reply_markup=reply_markup)
-            return CHOOSING
         else:
             await update.message.reply_text('Please forward a video file.')
     else:
@@ -141,7 +132,6 @@ async def handle_tv_series(update, context):
         os.makedirs(destination)
     dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
     await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
-    return CHOSEN
 
 async def handle_button_click(update, context):
     file_path = context.user_data.get('file_path')
@@ -188,22 +178,6 @@ async def handle_button_click(update, context):
     else:
         await query.answer(text='Invalid choice!')
         return
-
-    return CHOSEN
-
-def cancel(update, context):
-    """Cancel the conversation."""
-    update.message.reply_text("Conversation cancelled.")
-    return ConversationHandler.END
-
-conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.FORWARDED, handle_video)],
-    states={
-        CHOOSING: [CallbackQueryHandler(handle_button_click)],
-    },
-    fallbacks=[CommandHandler('cancel', cancel)],
-)
-
         
 def main() -> None:
     """Start the bot."""
@@ -220,7 +194,6 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.FORWARDED, handle_video))
     application.add_handler(CallbackQueryHandler(handle_button_click, pattern='^(movie|tv_series)$'))
     application.add_handler(CallbackQueryHandler(handle_tv_series))
-    application.add_handler(conv_handler)
 
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
