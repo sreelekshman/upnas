@@ -133,6 +133,36 @@ async def handle_tv_series(update, context):
     dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
     await query.edit_message_text(text = f'{file_name} has been pushed to {dest}')
 
+async def new_series(update, context):
+    query = update.callback_query
+    choice = query.data  # Access the callback data from the button
+    await query.edit_message_text(text=f"Enter the name of the Series:")
+    
+async def handle_user_reply(update, context):
+    user_reply = str(update.message.text)
+    choice = user_reply
+    video = context.user_data.get('video')
+    if (context.user_data.get('video')) == None:
+        return
+    file_name = video.file_name
+    location = context.user_data.get('location')
+    os.mkdir(f'/media/TV Shows/{user_reply}')
+    series_ID = series_id(choice)
+    season, ep_no = extract_season_episode(file_name)
+    if season == None:
+        season = get_season(ep_no, series_ID)
+    url = f"https://api.themoviedb.org/3/tv/{series_ID}?api_key={tmdb_key}&append_to_response=season/{season}"
+    response = requests.get(url).json()
+    target = [movie for movie in response[f'season/{season}']['episodes'] if movie['episode_number'] == ep_no]
+    image_url = f'https://image.tmdb.org/t/p/original{target[0]["still_path"]}'
+    ep_name = target[0]['name']
+    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=f"{ep_name}")
+    destination = f'/media/TV Shows/{choice}/Season {season}'
+    if not os.path.isdir(destination):
+        os.makedirs(destination)
+    dest = shutil.copyfile(f'/our_root{location}', f'{destination}/S{season} E{ep_no} {ep_name}{file_name[-4:]}')
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f'{file_name} has been pushed to {dest}')
+
 async def handle_button_click(update, context):
     file_path = context.user_data.get('file_path')
     video = context.user_data.get('video')
@@ -172,6 +202,7 @@ async def handle_button_click(update, context):
         series = fetch_series_names('/media/TV Shows')
         for serie in series:
             keyboard.append([InlineKeyboardButton(serie, callback_data=serie)])
+        keyboard.append([InlineKeyboardButton('New Series', callback_data='new')])
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await query.edit_message_text('Select the Series:', reply_markup=reply_markup)
         #dest = shutil.copyfile(f'/our_root{location}', f'/media/TV Shows/{file_name}')
@@ -189,9 +220,11 @@ def main() -> None:
     application.add_handler(CommandHandler("purge", purge))
     application.add_handler(CommandHandler("fpurge", fpurge))
     application.add_handler(CommandHandler("ping", ping))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_user_reply))
 
     # on non command i.e message - echo the message on Telegram
     application.add_handler(MessageHandler(filters.FORWARDED, handle_video))
+    application.add_handler(CallbackQueryHandler(new_series, pattern='new'))
     application.add_handler(CallbackQueryHandler(handle_button_click, pattern='^(movie|tv_series)$'))
     application.add_handler(CallbackQueryHandler(handle_tv_series))
 
