@@ -1,4 +1,5 @@
 .dockerignore
 .vscode/
+.venv/
 functions/__pycache__/
 
