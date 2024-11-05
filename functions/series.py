@@ -46,6 +46,7 @@ def movie_folder_name(filename):
   # Remove dots (".") that might be used instead of spaces
   movie_name = parts[0].replace(".", " ")
   movie_name = movie_name.replace("_", " ")
+  movie_name = re.sub(r"[\[\(].*?[\)\]]", "", movie_name).strip()
 
   # Extract year from the second part
   year_match = re.search(year_pattern, parts[1])
