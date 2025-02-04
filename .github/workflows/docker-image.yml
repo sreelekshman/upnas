@@ -19,5 +19,5 @@ jobs:
       run: docker build . --file Dockerfile --tag sreelekshman/upnas:latest
     - name: Push the image to DockerHub
       run: |
-        echo ${{ secrets.GH_ACTION }} | docker login -u sreelekshman --password-stdin
-        docker push sreelekshman/upnas:latest
+        docker login -u sreelekshman -p ${{ secrets.GH_ACTION }}
+        docker push sreelekshman/blissroms-jenkins:latest
