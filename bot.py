@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 tmdb_key = os.getenv("TMDb_KEY")
 bot_key = os.getenv("BOT_KEY")
+server_ip = os.getenv("SERVER")
 
 async def purge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -213,7 +214,7 @@ async def handle_button_click(update, context):
 def main() -> None:
     """Start the bot."""
     # Create the Application and pass it your bot's token.
-    application = Application.builder().token(bot_key).base_url("http://192.168.1.8:9099/bot").base_file_url("http://192.168.1.8:9099/file/bot").local_mode(local_mode=True).build()
+    application = Application.builder().token(bot_key).base_url(f"{server_ip}/bot").base_file_url(f"{server_ip}/file/bot").local_mode(local_mode=True).build()
 
     # on different commands - answer in Telegram
     application.add_handler(CommandHandler("start", start))
