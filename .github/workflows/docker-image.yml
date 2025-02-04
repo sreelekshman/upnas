@@ -20,4 +20,4 @@ jobs:
     - name: Push the image to DockerHub
       run: |
         docker login -u sreelekshman -p ${{ secrets.GH_ACTION }}
-        docker push sreelekshman/blissroms-jenkins:latest
+        docker push sreelekshman/upnas:latest
