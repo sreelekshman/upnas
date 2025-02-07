@@ -17,7 +17,7 @@ To get started with upNAS, follow these steps:
 ### Prerequisites
 
 - A Telegram account.
-- A local ```telegram-bot-api``` (hosted at 192.168.1.8:9099 here).
+- A local ```telegram-bot-api```.
 - Access to a server or device where the bot can be hosted (I am hosting it as a docker container on my TrueNAS Scale server).
 - Storage solutions (like SMB storage) set up to receive files.
 - TMDb API key for fetching metadata (optional).
