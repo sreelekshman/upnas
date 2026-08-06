@@ -162,14 +162,26 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
     target = [ep for ep in episodes if ep.get('episode_number') == ep_no]
     
+    ep_name = f"Episode {ep_no}"
+    image_url = None
+
     if target:
-        ep_name = target[0].get('name', f'Episode {ep_no}')
+        ep_name = target[0].get('name', ep_name)
         still_path = target[0].get("still_path")
         if still_path:
             image_url = f'https://image.tmdb.org/t/p/original{still_path}'
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
+
+    if not image_url:
+        season_poster = data.get(f'season/{season}', {}).get('poster_path')
+        series_poster = data.get('poster_path')
+        best_poster = season_poster or series_poster
+        if best_poster:
+            image_url = f'https://image.tmdb.org/t/p/original{best_poster}'
+            
+    if image_url:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
     else:
-        ep_name = f"Episode {ep_no}" 
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=ep_name)
 
     destination_dir = f'/media/TV Shows/{choice}/Season {season}'
     os.makedirs(destination_dir, exist_ok=True)
@@ -210,8 +222,6 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await update.message.reply_text(f"Processing series: {choice}...")
     
-    os.makedirs(f'/media/TV Shows/{choice}', exist_ok=True)
-    
     s_id = await series_id(choice)
     if not s_id:
         await status_msg.edit_text(f"Could not find TV Series: {choice}")
@@ -241,14 +251,26 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
     target = [ep for ep in episodes if ep.get('episode_number') == ep_no]
     
+    ep_name = f"Episode {ep_no}"
+    image_url = None
+
     if target:
-        ep_name = target[0].get('name', f'Episode {ep_no}')
+        ep_name = target[0].get('name', ep_name)
         still_path = target[0].get("still_path")
         if still_path:
             image_url = f'https://image.tmdb.org/t/p/original{still_path}'
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
+
+    if not image_url:
+        season_poster = data.get(f'season/{season}', {}).get('poster_path')
+        series_poster = data.get('poster_path')
+        best_poster = season_poster or series_poster
+        if best_poster:
+            image_url = f'https://image.tmdb.org/t/p/original{best_poster}'
+            
+    if image_url:
+        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
     else:
-        ep_name = f"Episode {ep_no}" 
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=ep_name)
 
     destination_dir = f'/media/TV Shows/{choice}/Season {season}'
     os.makedirs(destination_dir, exist_ok=True)
@@ -298,10 +320,26 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
             
         try:
-            search_query = folder_name[:-7].replace(" ", "+") if len(folder_name) > 7 else folder_name.replace(" ", "+")
-            year = folder_name[-5:-1] if len(folder_name) >= 7 else ""
+            import re
+            movie_name = folder_name
+            year = ""
+            
+            # Extract year robustly
+            year_match = re.search(r"\[?\(?(\d{4})\]?\)?", file_name)
+            if year_match:
+                year = year_match.group(1)
+                
+            if folder_name.endswith(f"({year})"):
+                movie_name = folder_name[:-7].strip()
+            elif folder_name.endswith(f" {year}"):
+                movie_name = folder_name[:-5].strip()
+                
+            search_query = movie_name.replace(" ", "+")
             
             url = f"https://api.themoviedb.org/3/search/movie?query={search_query}&api_key={tmdb_key}"
+            if year:
+                url += f"&primary_release_year={year}"
+                
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
