@@ -65,6 +65,7 @@ def movie_folder_name(filename):
     
     # Sometimes names might have extra dashes or weird prefixes if not caught by brackets
     movie_name = re.sub(r"^[-_ ]+", "", movie_name)
+    movie_name = re.sub(r"[-_ ]+$", "", movie_name)
 
     year_match = re.search(year_pattern, parts[1])
     if year_match:
