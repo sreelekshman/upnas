@@ -135,7 +135,12 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     s_id = await series_id(choice)
     if not s_id:
-        await query.edit_message_text(f"Could not find TV Series: {choice} on TMDb.")
+        context.user_data['force_save_choice'] = choice
+        keyboard = [[
+            InlineKeyboardButton('Force Save', callback_data='force_save'),
+            InlineKeyboardButton('Cancel', callback_data='cancel')
+        ]]
+        await query.edit_message_text(f"Could not find TV Series: {choice} on TMDb. Force save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
         return
 
     season, ep_no = extract_season_episode(file_name)
@@ -225,7 +230,12 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     s_id = await series_id(choice)
     if not s_id:
-        await status_msg.edit_text(f"Could not find TV Series: {choice}")
+        context.user_data['force_save_choice'] = choice
+        keyboard = [[
+            InlineKeyboardButton('Force Save', callback_data='force_save'),
+            InlineKeyboardButton('Cancel', callback_data='cancel')
+        ]]
+        await status_msg.edit_text(f"Could not find TV Series: {choice} on TMDb. Force save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
         return
 
     season, ep_no = extract_season_episode(file_name)
@@ -374,6 +384,46 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
         await query.edit_message_text('Select the Series:', reply_markup=reply_markup)
 
+async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    choice = context.user_data.get('force_save_choice')
+    video = context.user_data.get('video')
+    location = context.user_data.get('location')
+    
+    if not choice or not video or not location:
+        await query.edit_message_text("Session expired. Please try again.")
+        return
+        
+    file_name = video.file_name
+    season, ep_no = extract_season_episode(file_name)
+    
+    if season is None:
+        season = 1
+    if ep_no is None:
+        # Fallback if episode number is missing
+        ep_no = 1
+        
+    destination_dir = f'/media/TV Shows/{choice}/Season {season}'
+    os.makedirs(destination_dir, exist_ok=True)
+    
+    file_ext = os.path.splitext(file_name)[1]
+    final_dest = os.path.join(destination_dir, f'{choice} - S{season:02d}E{ep_no:02d}{file_ext}')
+    
+    await query.edit_message_text(text=f'Force saving to {final_dest}...')
+    
+    try:
+        shutil.copyfile(f'/our_root{location}', final_dest)
+        await query.edit_message_text(text=f'Successfully forced saved to: {final_dest}')
+    except Exception as e:
+        await query.edit_message_text(text=f'Failed to copy file: {e}')
+
+async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("Operation cancelled.")
+
 def main() -> None:
     application = Application.builder().token(bot_key).base_url(f"{server_ip}/bot").base_file_url(f"{server_ip}/file/bot").local_mode(local_mode=True).build()
 
@@ -389,6 +439,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Document.VIDEO | filters.VIDEO, handle_video))
     
     application.add_handler(CallbackQueryHandler(new_series, pattern='^new$'))
+    application.add_handler(CallbackQueryHandler(handle_force_save, pattern='^force_save$'))
+    application.add_handler(CallbackQueryHandler(handle_cancel, pattern='^cancel$'))
     application.add_handler(CallbackQueryHandler(handle_button_click, pattern='^(movie|tv_series)$'))
     application.add_handler(CallbackQueryHandler(handle_tv_series, pattern='^(?!movie|tv_series|new).*$'))
 
