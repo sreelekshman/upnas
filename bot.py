@@ -8,6 +8,7 @@ import httpx
 import traceback
 import html
 import sys
+import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -320,7 +321,6 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             return
             
         try:
-            import re
             movie_name = folder_name
             year = ""
             
