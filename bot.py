@@ -85,18 +85,66 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await update.message.reply_text("Fetching file info...")
     file_id = media.file_id
+    expected_size = media.file_size
     retries = 3
     file_path = None
+    import time
 
     for attempt in range(retries):
+        stop_event = asyncio.Event()
+        
+        async def monitor_download(msg, exp_size, event):
+            while not event.is_set():
+                current_size = 0
+                latest_time = 0
+                now = time.time()
+                for d in ['/our_root/documents', '/our_root/videos', '/our_root/temp', '/our_root/animation', '/our_root/audio', '/our_root/voice']:
+                    if not os.path.exists(d):
+                        continue
+                    try:
+                        for f in os.listdir(d):
+                            fp = os.path.join(d, f)
+                            if os.path.isfile(fp):
+                                mtime = os.path.getmtime(fp)
+                                if now - mtime < 60:
+                                    size = os.path.getsize(fp)
+                                    if mtime > latest_time:
+                                        latest_time = mtime
+                                        current_size = size
+                    except Exception:
+                        pass
+                
+                if current_size > 0:
+                    if exp_size:
+                        percent = min((current_size / exp_size) * 100, 100.0)
+                        text = f"Downloading... {percent:.1f}% ({current_size/1048576:.1f}MB / {exp_size/1048576:.1f}MB)"
+                    else:
+                        text = f"Downloading... {current_size/1048576:.1f}MB"
+                    try:
+                        await msg.edit_text(text)
+                    except Exception:
+                        pass
+                
+                # Check for exit condition more frequently than 3s by sleeping in smaller chunks
+                for _ in range(6):
+                    if event.is_set():
+                        break
+                    await asyncio.sleep(0.5)
+                
+        monitor_task = asyncio.create_task(monitor_download(status_msg, expected_size, stop_event))
+
         try:
-            file_path = await context.bot.get_file(file_id, read_timeout=30)
+            file_path = await context.bot.get_file(file_id, read_timeout=7200, write_timeout=7200, connect_timeout=7200, pool_timeout=7200)
+            stop_event.set()
+            await monitor_task
             break
         except Exception as e:
+            stop_event.set()
+            await monitor_task
             error_message = str(e)
-            if "httpx.RemoteProtocolError" in error_message or "Connection aborted" in error_message or "read timeout" in error_message.lower():
+            if "httpx.RemoteProtocolError" in error_message or "Connection aborted" in error_message or "read timeout" in error_message.lower() or "timeout" in error_message.lower():
                 if attempt < retries - 1:
-                    await status_msg.edit_text(f'Network error. Retrying ({attempt+1}/{retries})...')
+                    await status_msg.edit_text(f'Network error/Timeout. Retrying ({attempt+1}/{retries})...')
                     await asyncio.sleep(2)
                     continue
             if "Wrong file_id or the file is temporarily unavailable" in error_message:
