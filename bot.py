@@ -70,7 +70,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(rf"Hi {user.mention_html()}! Send me a video file.")
 
-async def async_copyfile_with_progress(src, dst, msg_obj):
+async def async_copyfile_with_progress(src, dst, msg_obj, prefix=""):
     import time
     try:
         total_size = os.path.getsize(src)
@@ -99,10 +99,11 @@ async def async_copyfile_with_progress(src, dst, msg_obj):
                 else:
                     text = f"<b>💾 Copying...</b>\n<code>{copied/1048576:7.1f} MB</code>"
                 try:
+                    full_text = f"{prefix}\n\n{text}" if prefix else text
                     if hasattr(msg_obj, 'edit_message_text'):
-                        await msg_obj.edit_message_text(text, parse_mode=ParseMode.HTML)
+                        await msg_obj.edit_message_text(full_text, parse_mode=ParseMode.HTML)
                     else:
-                        await msg_obj.edit_text(text, parse_mode=ParseMode.HTML)
+                        await msg_obj.edit_text(full_text, parse_mode=ParseMode.HTML)
                 except Exception:
                     pass
                 last_update = now
@@ -198,13 +199,28 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data['file_path'] = file_path
     context.user_data['video'] = media
+    
+    # Calculate downloaded size for history
+    context.user_data['history'] = []
+    try:
+        real_size = os.path.getsize(file_path.file_path)
+    except:
+        real_size = expected_size or 0
+        
+    if real_size > 0:
+        sz_mb = real_size / 1048576
+        dl_text = f"<b>📥 Downloaded</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+    else:
+        dl_text = "<b>📥 Downloaded</b>"
+    context.user_data['history'].append(dl_text)
+    history_str = "\n\n".join(context.user_data['history'])
 
     keyboard = [
         [InlineKeyboardButton('Movie', callback_data='movie')],
         [InlineKeyboardButton('TV Series', callback_data='tv_series')]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await status_msg.edit_text('<b>🎬 Choose a category:</b>', reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    await status_msg.edit_text(f'{history_str}\n\n<b>🎬 Choose a category:</b>', reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -219,7 +235,8 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_name = video.file_name
     location = context.user_data.get('location')
 
-    await query.edit_message_text(text=f"<b>⚙️ Processing:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
+    history_str = "\n\n".join(context.user_data.get('history', []))
+    await query.edit_message_text(text=f"{history_str}\n\n<b>⚙️ Processing:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
 
     s_id = await series_id(choice)
     if not s_id:
@@ -228,7 +245,7 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton('Force Save', callback_data='force_save'),
             InlineKeyboardButton('Cancel', callback_data='cancel')
         ]]
-        await query.edit_message_text(f"<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
+        await query.edit_message_text(f"{history_str}\n\n<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
         return
 
     season, ep_no = extract_season_episode(file_name)
@@ -284,15 +301,31 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     final_dest = os.path.join(destination_dir, f'S{season} E{ep_no} {ep_name}{file_ext}')
     
     try:
-        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query, prefix=history_str)
         if poster_to_send:
             try:
                 await query.message.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'<b>{html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f"{history_str}\n\n<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
         else:
-            await query.edit_message_text(text=f'<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await query.edit_message_text(text=f"{history_str}\n\n<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
     except Exception as e:
         await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
@@ -321,7 +354,8 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_name = video.file_name
     location = context.user_data.get('location')
 
-    status_msg = await update.message.reply_text(f"<b>⚙️ Processing series:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
+    status_msg = history_str = "\n\n".join(context.user_data.get('history', []))
+    status_msg = await update.message.reply_text(f"{history_str}\n\n<b>⚙️ Processing series:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
     
     s_id = await series_id(choice)
     if not s_id:
@@ -330,7 +364,7 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton('Force Save', callback_data='force_save'),
             InlineKeyboardButton('Cancel', callback_data='cancel')
         ]]
-        await status_msg.edit_text(f"<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
+        await status_msg.edit_text(f"{history_str}\n\n<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
         return
 
     season, ep_no = extract_season_episode(file_name)
@@ -385,15 +419,31 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     final_dest = os.path.join(destination_dir, f'S{season} E{ep_no} {ep_name}{file_ext}')
     
     try:
-        await async_copyfile_with_progress(f'/our_root{location}', final_dest, status_msg)
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, status_msg, prefix=history_str)
         if poster_to_send:
             try:
                 await status_msg.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'<b>{html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f"{history_str}\n\n<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
         else:
-            await status_msg.edit_text(text=f'<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await status_msg.edit_text(text=f"{history_str}\n\n<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
     except Exception as e:
         await status_msg.edit_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
@@ -416,7 +466,8 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     file_name = video.file_name
 
     if choice == 'movie':
-        await query.edit_message_text(text="<b>⚙️ Movie selected. Processing...</b>", parse_mode=ParseMode.HTML)
+        history_str = "\n\n".join(context.user_data.get('history', []))
+        await query.edit_message_text(text=f"{history_str}\n\n<b>⚙️ Movie selected. Processing...</b>", parse_mode=ParseMode.HTML)
         folder_name = movie_folder_name(file_name)
         
         if not folder_name:
@@ -427,7 +478,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         final_dest = f'{dest_dir}/{file_name}'
         
         try:
-            await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
+            await async_copyfile_with_progress(f'/our_root{location}', final_dest, query, prefix=history_str)
         except Exception as e:
             await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
             return
@@ -472,9 +523,25 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.message.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=f'<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=f"{history_str}\n\n<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
         else:
-            await query.edit_message_text(text=f'<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+            try:
+                final_size = os.path.getsize(final_dest)
+                sz_mb = final_size / 1048576
+                cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+                context.user_data['history'].append(cp_text)
+            except:
+                pass
+            history_str = "\n\n".join(context.user_data.get('history', []))
+            await query.edit_message_text(text=f"{history_str}\n\n<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
 
     elif choice == 'tv_series':
         keyboard = []
@@ -491,7 +558,8 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             
         keyboard.append([InlineKeyboardButton('➕ New Series', callback_data='new')])
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        await query.edit_message_text('<b>📺 Select the Series:</b>', reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        history_str = "\n\n".join(context.user_data.get('history', []))
+        await query.edit_message_text(text=f"{history_str}\n\n<b>📺 Select the Series:</b>", reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -520,11 +588,20 @@ async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_ext = os.path.splitext(file_name)[1]
     final_dest = os.path.join(destination_dir, f'{choice} - S{season:02d}E{ep_no:02d}{file_ext}')
     
-    await query.edit_message_text(text=f'<b>⚙️ Force saving to:</b>\n<code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+    history_str = "\n\n".join(context.user_data.get('history', []))
+    await query.edit_message_text(text=f"{history_str}\n\n<b>⚙️ Force saving to:</b>\n<code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
     
     try:
-        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
-        await query.edit_message_text(text=f'<b>✅ Successfully force saved to:</b>\n<code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query, prefix=history_str)
+        try:
+            final_size = os.path.getsize(final_dest)
+            sz_mb = final_size / 1048576
+            cp_text = f"<b>💾 Copied</b>\n<code>[██████████] 100.0%\n{sz_mb:7.1f} MB / {sz_mb:7.1f} MB</code>"
+            context.user_data['history'].append(cp_text)
+        except:
+            pass
+        history_str = "\n\n".join(context.user_data.get('history', []))
+        await query.edit_message_text(text=f"{history_str}\n\n<b>✅ Successfully force saved to:</b>\n<code>{html.escape(final_dest)}</code>", parse_mode=ParseMode.HTML)
     except Exception as e:
         await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
