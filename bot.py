@@ -93,14 +93,16 @@ async def async_copyfile_with_progress(src, dst, msg_obj):
             if now - last_update >= 3:
                 if total_size > 0:
                     percent = min((copied / total_size) * 100, 100.0)
-                    text = f"Copying... {percent:.1f}% ({copied/1048576:.1f}MB / {total_size/1048576:.1f}MB)"
+                    filled = int(percent / 10)
+                    bar = f"[{'█' * filled}{'░' * (10 - filled)}]"
+                    text = f"<b>💾 Copying...</b>\n<code>{bar} {percent:5.1f}%\n{copied/1048576:7.1f} MB / {total_size/1048576:7.1f} MB</code>"
                 else:
-                    text = f"Copying... {copied/1048576:.1f}MB"
+                    text = f"<b>💾 Copying...</b>\n<code>{copied/1048576:7.1f} MB</code>"
                 try:
                     if hasattr(msg_obj, 'edit_message_text'):
-                        await msg_obj.edit_message_text(text)
+                        await msg_obj.edit_message_text(text, parse_mode=ParseMode.HTML)
                     else:
-                        await msg_obj.edit_text(text)
+                        await msg_obj.edit_text(text, parse_mode=ParseMode.HTML)
                 except Exception:
                     pass
                 last_update = now
@@ -111,15 +113,15 @@ async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ALLOWED_USERS:
-        await update.message.reply_text('Sorry, You are not allowed to use this bot.')
+        await update.message.reply_text('<b>🚫 Sorry, You are not allowed to use this bot.</b>', parse_mode=ParseMode.HTML)
         return
 
     media = update.message.video or update.message.document
     if not media:
-        await update.message.reply_text('Please forward a video file.')
+        await update.message.reply_text('<b>⚠️ Please forward a video file.</b>', parse_mode=ParseMode.HTML)
         return
 
-    status_msg = await update.message.reply_text("Fetching file info...")
+    status_msg = await update.message.reply_text("<b>🔍 Fetching file info...</b>", parse_mode=ParseMode.HTML)
     file_id = media.file_id
     expected_size = media.file_size
     retries = 3
@@ -153,11 +155,13 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if current_size > 0:
                     if exp_size:
                         percent = min((current_size / exp_size) * 100, 100.0)
-                        text = f"Downloading... {percent:.1f}% ({current_size/1048576:.1f}MB / {exp_size/1048576:.1f}MB)"
+                        filled = int(percent / 10)
+                        bar = f"[{'█' * filled}{'░' * (10 - filled)}]"
+                        text = f"<b>📥 Downloading...</b>\n<code>{bar} {percent:5.1f}%\n{current_size/1048576:7.1f} MB / {exp_size/1048576:7.1f} MB</code>"
                     else:
-                        text = f"Downloading... {current_size/1048576:.1f}MB"
+                        text = f"<b>📥 Downloading...</b>\n<code>{current_size/1048576:7.1f} MB (Size Unknown)</code>"
                     try:
-                        await msg.edit_text(text)
+                        await msg.edit_text(text, parse_mode=ParseMode.HTML)
                     except Exception:
                         pass
                 
@@ -180,13 +184,13 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
             error_message = str(e)
             if "httpx.RemoteProtocolError" in error_message or "Connection aborted" in error_message or "read timeout" in error_message.lower() or "timeout" in error_message.lower():
                 if attempt < retries - 1:
-                    await status_msg.edit_text(f'Network error/Timeout. Retrying ({attempt+1}/{retries})...')
+                    await status_msg.edit_text(f'<b>⚠️ Network error/Timeout.</b> Retrying ({attempt+1}/{retries})...', parse_mode=ParseMode.HTML)
                     await asyncio.sleep(2)
                     continue
             if "Wrong file_id or the file is temporarily unavailable" in error_message:
-                await status_msg.edit_text('The file is temporarily unavailable. Try again later.')
+                await status_msg.edit_text('<b>❌ The file is temporarily unavailable.</b> Try again later.', parse_mode=ParseMode.HTML)
                 return
-            await status_msg.edit_text(f'Error fetching file: {e}')
+            await status_msg.edit_text(f'<b>❌ Error fetching file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
             return
 
     if not file_path:
@@ -200,7 +204,7 @@ async def handle_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton('TV Series', callback_data='tv_series')]
     ]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-    await status_msg.edit_text('Choose an option:', reply_markup=reply_markup)
+    await status_msg.edit_text('<b>🎬 Choose a category:</b>', reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -209,13 +213,13 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     video = context.user_data.get('video')
     if not video:
-        await query.edit_message_text("Session expired. Please forward the video again.")
+        await query.edit_message_text("<b>⚠️ Session expired.</b> Please forward the video again.", parse_mode=ParseMode.HTML)
         return
         
     file_name = video.file_name
     location = context.user_data.get('location')
 
-    await query.edit_message_text(text=f"Processing {choice}...")
+    await query.edit_message_text(text=f"<b>⚙️ Processing:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
 
     s_id = await series_id(choice)
     if not s_id:
@@ -224,12 +228,12 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton('Force Save', callback_data='force_save'),
             InlineKeyboardButton('Cancel', callback_data='cancel')
         ]]
-        await query.edit_message_text(f"Could not find TV Series: {choice} on TMDb. Force save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        await query.edit_message_text(f"<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
         return
 
     season, ep_no = extract_season_episode(file_name)
     if ep_no is None:
-        await query.edit_message_text("Could not extract episode number from filename.")
+        await query.edit_message_text("<b>⚠️ Could not extract episode number from filename.</b>", parse_mode=ParseMode.HTML)
         return
 
     if season is None:
@@ -246,7 +250,7 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response.raise_for_status()
             data = response.json()
         except httpx.RequestError as e:
-            await query.edit_message_text(f"Error fetching episode details: {e}")
+            await query.edit_message_text(f"<b>❌ Error fetching episode details:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
             return
 
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
@@ -286,17 +290,17 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.message.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'{ep_name}\nSaved to: {final_dest}')
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'<b>{html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
         else:
-            await query.edit_message_text(text=f'{ep_name}\nSaved to: {final_dest}')
+            await query.edit_message_text(text=f'<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
     except Exception as e:
-        await query.edit_message_text(text=f'Failed to copy file: {e}')
+        await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
 
 async def new_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text(text="Enter the name of the Series:")
+    await query.edit_message_text(text="<b>📝 Enter the name of the Series:</b>", parse_mode=ParseMode.HTML)
     context.user_data['awaiting_series_name'] = True
 
 async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -311,13 +315,13 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     video = context.user_data.get('video')
     if not video:
-        await update.message.reply_text("Session expired. Please forward the video again.")
+        await update.message.reply_text("<b>⚠️ Session expired.</b> Please forward the video again.", parse_mode=ParseMode.HTML)
         return
         
     file_name = video.file_name
     location = context.user_data.get('location')
 
-    status_msg = await update.message.reply_text(f"Processing series: {choice}...")
+    status_msg = await update.message.reply_text(f"<b>⚙️ Processing series:</b> <code>{html.escape(choice)}</code>", parse_mode=ParseMode.HTML)
     
     s_id = await series_id(choice)
     if not s_id:
@@ -326,12 +330,12 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton('Force Save', callback_data='force_save'),
             InlineKeyboardButton('Cancel', callback_data='cancel')
         ]]
-        await status_msg.edit_text(f"Could not find TV Series: {choice} on TMDb. Force save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard))
+        await status_msg.edit_text(f"<b>⚠️ Could not find TV Series:</b> <code>{html.escape(choice)}</code> on TMDb.\nForce save?", reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard), parse_mode=ParseMode.HTML)
         return
 
     season, ep_no = extract_season_episode(file_name)
     if ep_no is None:
-        await status_msg.edit_text("Could not extract episode number from filename.")
+        await status_msg.edit_text("<b>⚠️ Could not extract episode number from filename.</b>", parse_mode=ParseMode.HTML)
         return
 
     if season is None:
@@ -347,7 +351,7 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response.raise_for_status()
             data = response.json()
         except httpx.RequestError as e:
-            await status_msg.edit_text(f"Error fetching episode details: {e}")
+            await status_msg.edit_text(f"<b>❌ Error fetching episode details:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
             return
 
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
@@ -387,11 +391,11 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await status_msg.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'{ep_name}\nSaved to: {final_dest}')
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'<b>{html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
         else:
-            await status_msg.edit_text(text=f'{ep_name}\nSaved to: {final_dest}')
+            await status_msg.edit_text(text=f'<b>✅ {html.escape(ep_name)}</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
     except Exception as e:
-        await status_msg.edit_text(text=f'Failed to copy file: {e}')
+        await status_msg.edit_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
 async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -402,7 +406,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     video = context.user_data.get('video')
     
     if not file_path or not video:
-        await query.edit_message_text("Session expired. Please forward the video again.")
+        await query.edit_message_text("<b>⚠️ Session expired.</b> Please forward the video again.", parse_mode=ParseMode.HTML)
         return
 
     parsed_url = urlparse(file_path.file_path)
@@ -412,7 +416,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     file_name = video.file_name
 
     if choice == 'movie':
-        await query.edit_message_text(text="Movie selected. Processing...")
+        await query.edit_message_text(text="<b>⚙️ Movie selected. Processing...</b>", parse_mode=ParseMode.HTML)
         folder_name = movie_folder_name(file_name)
         
         if not folder_name:
@@ -425,7 +429,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
         except Exception as e:
-            await query.edit_message_text(text=f'Failed to copy file: {e}')
+            await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
             return
             
         poster = None
@@ -468,9 +472,9 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.message.delete()
             except Exception:
                 pass
-            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=f'Saved to: {final_dest}')
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=f'<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
         else:
-            await query.edit_message_text(text=f'Saved to: {final_dest}')
+            await query.edit_message_text(text=f'<b>✅ Movie Saved</b>\nSaved to: <code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
 
     elif choice == 'tv_series':
         keyboard = []
@@ -487,7 +491,7 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
             
         keyboard.append([InlineKeyboardButton('➕ New Series', callback_data='new')])
         reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-        await query.edit_message_text('Select the Series:', reply_markup=reply_markup)
+        await query.edit_message_text('<b>📺 Select the Series:</b>', reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -498,7 +502,7 @@ async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     location = context.user_data.get('location')
     
     if not choice or not video or not location:
-        await query.edit_message_text("Session expired. Please try again.")
+        await query.edit_message_text("<b>⚠️ Session expired.</b> Please try again.", parse_mode=ParseMode.HTML)
         return
         
     file_name = video.file_name
@@ -516,18 +520,18 @@ async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file_ext = os.path.splitext(file_name)[1]
     final_dest = os.path.join(destination_dir, f'{choice} - S{season:02d}E{ep_no:02d}{file_ext}')
     
-    await query.edit_message_text(text=f'Force saving to {final_dest}...')
+    await query.edit_message_text(text=f'<b>⚙️ Force saving to:</b>\n<code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
     
     try:
         await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
-        await query.edit_message_text(text=f'Successfully forced saved to: {final_dest}')
+        await query.edit_message_text(text=f'<b>✅ Successfully force saved to:</b>\n<code>{html.escape(final_dest)}</code>', parse_mode=ParseMode.HTML)
     except Exception as e:
-        await query.edit_message_text(text=f'Failed to copy file: {e}')
+        await query.edit_message_text(text=f'<b>❌ Failed to copy file:</b>\n<code>{html.escape(str(e))}</code>', parse_mode=ParseMode.HTML)
 
 async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("Operation cancelled.")
+    await query.edit_message_text("<b>🚫 Operation cancelled.</b>", parse_mode=ParseMode.HTML)
 
 def main() -> None:
     application = Application.builder().token(bot_key).base_url(f"{server_ip}/bot").base_file_url(f"{server_ip}/file/bot").local_mode(local_mode=True).build()
