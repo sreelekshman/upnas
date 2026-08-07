@@ -70,6 +70,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_html(rf"Hi {user.mention_html()}! Send me a video file.")
 
+async def async_copyfile_with_progress(src, dst, msg_obj):
+    import time
+    try:
+        total_size = os.path.getsize(src)
+    except Exception:
+        total_size = 0
+        
+    copied = 0
+    chunk_size = 1024 * 1024 * 4 # 4MB chunks
+    last_update = time.time()
+    
+    with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        while True:
+            chunk = fsrc.read(chunk_size)
+            if not chunk:
+                break
+            fdst.write(chunk)
+            copied += len(chunk)
+            
+            now = time.time()
+            if now - last_update >= 3:
+                if total_size > 0:
+                    percent = min((copied / total_size) * 100, 100.0)
+                    text = f"Copying... {percent:.1f}% ({copied/1048576:.1f}MB / {total_size/1048576:.1f}MB)"
+                else:
+                    text = f"Copying... {copied/1048576:.1f}MB"
+                try:
+                    if hasattr(msg_obj, 'edit_message_text'):
+                        await msg_obj.edit_message_text(text)
+                    else:
+                        await msg_obj.edit_text(text)
+                except Exception:
+                    pass
+                last_update = now
+            await asyncio.sleep(0.01)
+
 async def ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Pong!")
 
@@ -233,9 +269,9 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
             image_url = f'https://image.tmdb.org/t/p/original{best_poster}'
             
     if image_url:
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
+        poster_to_send = image_url
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=ep_name)
+        poster_to_send = None
 
     destination_dir = f'/media/TV Shows/{choice}/Season {season}'
     os.makedirs(destination_dir, exist_ok=True)
@@ -244,8 +280,15 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
     final_dest = os.path.join(destination_dir, f'S{season} E{ep_no} {ep_name}{file_ext}')
     
     try:
-        shutil.copyfile(f'/our_root{location}', final_dest)
-        await query.edit_message_text(text=f'Saved to: {final_dest}')
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
+        if poster_to_send:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'{ep_name}\nSaved to: {final_dest}')
+        else:
+            await query.edit_message_text(text=f'{ep_name}\nSaved to: {final_dest}')
     except Exception as e:
         await query.edit_message_text(text=f'Failed to copy file: {e}')
 
@@ -327,9 +370,9 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             image_url = f'https://image.tmdb.org/t/p/original{best_poster}'
             
     if image_url:
-        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=image_url, caption=ep_name)
+        poster_to_send = image_url
     else:
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=ep_name)
+        poster_to_send = None
 
     destination_dir = f'/media/TV Shows/{choice}/Season {season}'
     os.makedirs(destination_dir, exist_ok=True)
@@ -338,8 +381,15 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     final_dest = os.path.join(destination_dir, f'S{season} E{ep_no} {ep_name}{file_ext}')
     
     try:
-        shutil.copyfile(f'/our_root{location}', final_dest)
-        await status_msg.edit_text(text=f'Saved to: {final_dest}')
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, status_msg)
+        if poster_to_send:
+            try:
+                await status_msg.delete()
+            except Exception:
+                pass
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster_to_send, caption=f'{ep_name}\nSaved to: {final_dest}')
+        else:
+            await status_msg.edit_text(text=f'{ep_name}\nSaved to: {final_dest}')
     except Exception as e:
         await status_msg.edit_text(text=f'Failed to copy file: {e}')
 
@@ -373,11 +423,12 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         final_dest = f'{dest_dir}/{file_name}'
         
         try:
-            shutil.copyfile(f'/our_root{location}', final_dest)
+            await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
         except Exception as e:
             await query.edit_message_text(text=f'Failed to copy file: {e}')
             return
             
+        poster = None
         try:
             movie_name = folder_name
             year = ""
@@ -409,11 +460,17 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
                 poster_path = match.get("poster_path")
                 if poster_path:
                     poster = f'https://image.tmdb.org/t/p/original{poster_path}'
-                    await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=folder_name)
         except Exception as e:
             logger.warning(f"Poster not found or error occurred: {e}")
             
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f'{file_name} has been pushed to {final_dest}')
+        if poster:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await context.bot.send_photo(chat_id=update.effective_chat.id, photo=poster, caption=f'Saved to: {final_dest}')
+        else:
+            await query.edit_message_text(text=f'Saved to: {final_dest}')
 
     elif choice == 'tv_series':
         keyboard = []
@@ -462,7 +519,7 @@ async def handle_force_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text=f'Force saving to {final_dest}...')
     
     try:
-        shutil.copyfile(f'/our_root{location}', final_dest)
+        await async_copyfile_with_progress(f'/our_root{location}', final_dest, query)
         await query.edit_message_text(text=f'Successfully forced saved to: {final_dest}')
     except Exception as e:
         await query.edit_message_text(text=f'Failed to copy file: {e}')
