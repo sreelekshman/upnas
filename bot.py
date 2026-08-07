@@ -266,9 +266,9 @@ async def handle_tv_series(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
-        except httpx.RequestError as e:
-            await query.edit_message_text(f"<b>❌ Error fetching episode details:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
-            return
+        except Exception as e:
+            logger.warning(f"Error fetching episode details: {e}")
+            data = {}
 
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
     target = [ep for ep in episodes if ep.get('episode_number') == ep_no]
@@ -384,9 +384,9 @@ async def handle_user_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response = await client.get(url)
             response.raise_for_status()
             data = response.json()
-        except httpx.RequestError as e:
-            await status_msg.edit_text(f"<b>❌ Error fetching episode details:</b>\n<code>{html.escape(str(e))}</code>", parse_mode=ParseMode.HTML)
-            return
+        except Exception as e:
+            logger.warning(f"Error fetching episode details: {e}")
+            data = {}
 
     episodes = data.get(f'season/{season}', {}).get('episodes', [])
     target = [ep for ep in episodes if ep.get('episode_number') == ep_no]
